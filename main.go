@@ -91,6 +91,41 @@ func main() {
 				return deploy(serviceName, newImage, containerName)
 			},
 		},
+		{
+			Name: "rollback",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:        "config-file",
+					Aliases:     []string{"f"},
+					Usage:       "the .kube/config file path",
+					Destination: &configFile,
+				},
+				&cli.StringFlag{
+					Name:        "service",
+					Aliases:     []string{"s"},
+					Usage:       "the service name",
+					Destination: &serviceName,
+				},
+				&cli.StringFlag{
+					Name:        "namespace",
+					Aliases:     []string{"n"},
+					Usage:       "the kubernetes namespace",
+					Value:       "default",
+					Destination: &namespace,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				clientset, err := getClientset(configFile)
+				if err != nil {
+					return fmt.Errorf("fail to get kubernetes clientset: %v", err)
+				}
+
+				deploymentsClient = clientset.ExtensionsV1beta1().Deployments(namespace)
+				servicesClient = clientset.CoreV1().Services(namespace)
+
+				return rollback(serviceName, newImage, containerName)
+			},
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -135,13 +170,87 @@ func deploy(serviceName, newImage, containerName string) error {
 	}
 
 	fmt.Println("Point service to new deployment")
-	servicePointsToNewDeployment(service, actualDeploy.Labels["version"])
+	servicePointsToNewDeployment(service, actualDeploy.Labels["version"], actualDeploy.Name)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("Scaling down backup deployment")
 	scale, err := deploymentsClient.GetScale(actualDeploy.Name, v1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	scale.Spec.Replicas = 0
+	_, err = deploymentsClient.UpdateScale(actualDeploy.Name, scale)
+	return err
+}
+
+func rollback(serviceName, newImage, containerName string) error {
+	fmt.Printf("Getting the service: %s\n", serviceName)
+	service, err := servicesClient.Get(serviceName, v1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	selector := ""
+	for k, v := range service.Spec.Selector {
+		selector += fmt.Sprintf("%s=%s,", k, v)
+	}
+	selector = strings.TrimSuffix(selector, ",")
+
+	fmt.Println("Getting the actual deployment")
+	deployments, err := deploymentsClient.List(v1.ListOptions{
+		LabelSelector: selector,
+	})
+	if err != nil {
+		return err
+	}
+
+	if len(deployments.Items) == 0 {
+		return fmt.Errorf("Deployment not found")
+	}
+
+	actualDeploy := deployments.Items[0]
+
+	fmt.Println("Getting the old deployment")
+	oldDeployment, ok := service.Labels["olddeployment"]
+	if !ok {
+		return fmt.Errorf("fail to rollback. cannot find old deployment")
+	}
+
+	deployment, err := deploymentsClient.Get(oldDeployment, v1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Scaling the old deployment")
+	scale, err := deploymentsClient.GetScale(deployment.Name, v1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	scale.Spec.Replicas = *actualDeploy.Spec.Replicas
+	_, err = deploymentsClient.UpdateScale(deployment.Name, scale)
+	if err != nil {
+		return err
+	}
+
+	if err := checkDeployment(deployment.Name); err != nil {
+		return err
+	}
+
+	fmt.Println("Pointing service to the old deployment")
+	service.Spec.Selector = deployment.Spec.Template.Labels
+	delete(service.Labels, "olddeployment")
+
+	_, err = servicesClient.Update(service)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Scaling down deployment")
+	scale, err = deploymentsClient.GetScale(actualDeploy.Name, v1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -220,16 +329,17 @@ func createNewDeployments(deploymentName, containerName, newImage string, isBlue
 	return checkDeployment(copyOfActualDeploy.Name)
 }
 
-func servicePointsToNewDeployment(service *apicorev1.Service, oldVersion string) error {
+func servicePointsToNewDeployment(service *apicorev1.Service, oldVersion,
+	oldDeployment string) error {
 	if oldVersion == greenVersion {
 		service.Spec.Selector["version"] = blueVersion
-		service.Labels["oldversion"] = greenVersion
 	} else if oldVersion == blueVersion {
 		service.Spec.Selector["version"] = greenVersion
-		service.Labels["oldversion"] = blueVersion
 	} else {
 		service.Spec.Selector["version"] = blueVersion
 	}
+
+	service.Labels["olddeployment"] = oldDeployment
 
 	_, err := servicesClient.Update(service)
 	return err
