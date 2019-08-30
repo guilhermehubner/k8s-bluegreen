@@ -308,7 +308,7 @@ func createNewDeployments(deploymentName, containerName, newImage string, isBlue
 	}
 
 	deleted := false
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 180; i++ {
 		time.Sleep(500 * time.Millisecond)
 
 		_, err := deploymentsClient.Get(copyOfActualDeploy.Name, v1.GetOptions{})
@@ -355,7 +355,7 @@ func checkDeployment(name string) error {
 		return nil
 	}
 
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 180; i++ {
 		time.Sleep(500 * time.Millisecond)
 
 		deployment, err := deploymentsClient.Get(name, v1.GetOptions{})
