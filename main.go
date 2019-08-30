@@ -312,7 +312,7 @@ func createNewDeployments(deploymentName, containerName, newImage string, isBlue
 		time.Sleep(500 * time.Millisecond)
 
 		_, err := deploymentsClient.Get(copyOfActualDeploy.Name, v1.GetOptions{})
-		if strings.Contains(err.Error(), "not found") {
+		if err != nil && strings.Contains(err.Error(), "not found") {
 			deleted = true
 			break
 		}
