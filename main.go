@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -13,12 +14,12 @@ import (
 	"k8s.io/client-go/kubernetes/typed/extensions/v1beta1"
 	"k8s.io/client-go/tools/clientcmd"
 
-	cli "gopkg.in/urfave/cli.v2"
+	"gopkg.in/urfave/cli.v2"
 )
 
 const (
-	blueSufix  = "--blue"
-	greenSufix = "--green"
+	blueSuffix  = "--blue"
+	greenSuffix = "--green"
 
 	greenVersion = "green"
 	blueVersion  = "blue"
@@ -32,7 +33,7 @@ var (
 func main() {
 	app := cli.App{}
 	app.Name = "K8s Blue&Green deploy"
-	app.Usage = "A blue/green deploy implemetation with pure kubernetes"
+	app.Usage = "A blue/green deploy implementation with pure kubernetes"
 	app.Version = "1.0.0"
 
 	var (
@@ -123,7 +124,7 @@ func main() {
 				deploymentsClient = clientset.ExtensionsV1beta1().Deployments(namespace)
 				servicesClient = clientset.CoreV1().Services(namespace)
 
-				return rollback(serviceName, newImage, containerName)
+				return rollback(serviceName)
 			},
 		},
 	}
@@ -147,7 +148,7 @@ func deploy(serviceName, newImage, containerName string) error {
 	}
 	selector = strings.TrimSuffix(selector, ",")
 
-	fmt.Println("Getting the deployments")
+	fmt.Println("Getting deployments")
 	deployments, err := deploymentsClient.List(v1.ListOptions{
 		LabelSelector: selector,
 	})
@@ -156,12 +157,12 @@ func deploy(serviceName, newImage, containerName string) error {
 	}
 
 	if len(deployments.Items) == 0 {
-		return fmt.Errorf("Deployment not found")
+		return errors.New("deployment not found")
 	}
 
 	actualDeploy := deployments.Items[0]
 
-	isBlue := strings.HasSuffix(actualDeploy.Name, blueSufix)
+	isBlue := strings.HasSuffix(actualDeploy.Name, blueSuffix)
 
 	fmt.Println("Creating new deployment")
 	err = createNewDeployments(actualDeploy.Name, containerName, newImage, isBlue)
@@ -170,7 +171,7 @@ func deploy(serviceName, newImage, containerName string) error {
 	}
 
 	fmt.Println("Point service to new deployment")
-	servicePointsToNewDeployment(service, actualDeploy.Labels["version"], actualDeploy.Name)
+	err = servicePointsToNewDeployment(service, actualDeploy.Labels["version"], actualDeploy.Name)
 	if err != nil {
 		return err
 	}
@@ -186,7 +187,7 @@ func deploy(serviceName, newImage, containerName string) error {
 	return err
 }
 
-func rollback(serviceName, newImage, containerName string) error {
+func rollback(serviceName string) error {
 	fmt.Printf("Getting the service: %s\n", serviceName)
 	service, err := servicesClient.Get(serviceName, v1.GetOptions{})
 	if err != nil {
@@ -208,7 +209,7 @@ func rollback(serviceName, newImage, containerName string) error {
 	}
 
 	if len(deployments.Items) == 0 {
-		return fmt.Errorf("Deployment not found")
+		return errors.New("deployment not found")
 	}
 
 	actualDeploy := deployments.Items[0]
@@ -216,7 +217,7 @@ func rollback(serviceName, newImage, containerName string) error {
 	fmt.Println("Getting the old deployment")
 	oldDeployment, ok := service.Labels["olddeployment"]
 	if !ok {
-		return fmt.Errorf("fail to rollback. cannot find old deployment")
+		return errors.New("fail to rollback. cannot find old deployment")
 	}
 
 	deployment, err := deploymentsClient.Get(oldDeployment, v1.GetOptions{})
@@ -281,13 +282,13 @@ func createNewDeployments(deploymentName, containerName, newImage string, isBlue
 	}
 
 	if isBlue {
-		copyOfActualDeploy.Name = strings.Split(deploymentName, blueSufix)[0] + greenSufix
+		copyOfActualDeploy.Name = strings.Split(deploymentName, blueSuffix)[0] + greenSuffix
 
 		copyOfActualDeploy.Labels["version"] = greenVersion
 		copyOfActualDeploy.Spec.Template.Labels["version"] = greenVersion
 		v1.AddLabelToSelector(copyOfActualDeploy.Spec.Selector, "version", greenVersion)
 	} else {
-		copyOfActualDeploy.Name = strings.Split(deploymentName, greenSufix)[0] + blueSufix
+		copyOfActualDeploy.Name = strings.Split(deploymentName, greenSuffix)[0] + blueSuffix
 
 		copyOfActualDeploy.Labels["version"] = blueVersion
 		copyOfActualDeploy.Spec.Template.Labels["version"] = blueVersion
@@ -318,7 +319,7 @@ func createNewDeployments(deploymentName, containerName, newImage string, isBlue
 		}
 	}
 	if !deleted {
-		return fmt.Errorf("Couldn't create new deployment")
+		return errors.New("couldn't create new deployment")
 	}
 
 	_, err = deploymentsClient.Create(copyOfActualDeploy)
