@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -44,6 +45,11 @@ func main() {
 		namespace     string
 	)
 
+	defaultConfigFile := ""
+	if home, err := os.UserHomeDir(); err == nil {
+		defaultConfigFile = path.Join(home, ".kube/config")
+	}
+
 	app.Commands = []*cli.Command{
 		{
 			Name: "deploy",
@@ -51,7 +57,8 @@ func main() {
 				&cli.StringFlag{
 					Name:        "config-file",
 					Aliases:     []string{"f"},
-					Usage:       "the .kube/config file path",
+					Usage:       "the kubernetes config file path",
+					Value:       defaultConfigFile,
 					Destination: &configFile,
 				},
 				&cli.StringFlag{
@@ -98,7 +105,8 @@ func main() {
 				&cli.StringFlag{
 					Name:        "config-file",
 					Aliases:     []string{"f"},
-					Usage:       "the .kube/config file path",
+					Usage:       "the kubernetes config file path",
+					Value:       defaultConfigFile,
 					Destination: &configFile,
 				},
 				&cli.StringFlag{
