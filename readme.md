@@ -1,4 +1,10 @@
+<img width="300" src="https://raw.githubusercontent.com/guilhermehubner/k8s-bluegreen/master/logo.png">
+
 # Kubernetes Blue Green Deploy
+[![Github Actions](https://github.com/guilhermehubner/k8s-bluegreen/workflows/tests/badge.svg)](https://github.com/guilhermehubner/k8s-bluegreen/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/guilhermehubner/k8s-bluegreen)](https://goreportcard.com/report/github.com/guilhermehubner/k8s-bluegreen)
+[![GoDoc](https://godoc.org/github.com/guilhermehubner/k8s-bluegreen?status.svg)](https://godoc.org/github.com/guilhermehubner/k8s-bluegreen)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 A blue/green deploy implementation with pure Kubernetes.
 This will atomically update a deployment image using a service and its labels.
