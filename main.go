@@ -9,14 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/urfave/cli.v2"
 	apicorev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	appsv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/kubernetes/typed/extensions/v1beta1"
 	"k8s.io/client-go/tools/clientcmd"
-
-	"gopkg.in/urfave/cli.v2"
 )
 
 const (
@@ -28,7 +27,7 @@ const (
 )
 
 var (
-	deploymentsClient v1beta1.DeploymentInterface
+	deploymentsClient appsv1.DeploymentInterface
 	servicesClient    corev1.ServiceInterface
 )
 
@@ -94,7 +93,7 @@ func main() {
 					return fmt.Errorf("fail to get kubernetes clientset: %v", err)
 				}
 
-				deploymentsClient = clientset.ExtensionsV1beta1().Deployments(namespace)
+				deploymentsClient = clientset.AppsV1().Deployments(namespace)
 				servicesClient = clientset.CoreV1().Services(namespace)
 
 				return deploy(serviceName, newImage, containerName)
@@ -130,7 +129,7 @@ func main() {
 					return fmt.Errorf("fail to get kubernetes clientset: %v", err)
 				}
 
-				deploymentsClient = clientset.ExtensionsV1beta1().Deployments(namespace)
+				deploymentsClient = clientset.AppsV1().Deployments(namespace)
 				servicesClient = clientset.CoreV1().Services(namespace)
 
 				return rollback(serviceName)
