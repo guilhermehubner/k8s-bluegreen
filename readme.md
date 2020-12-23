@@ -23,6 +23,15 @@ blue);
 ```
 go get -u github.com/guilhermehubner/k8s-bluegreen
 ```
+
+## Credentials
+
+You can connect to the cluster with a config file (`-f .kube/config`) or using environment variables. For example:
+```
+export KUBERNETES_SERVER=https://1.2.3.4:1234
+export KUBERNETES_CERT=$(cat ca.cert)
+export KUBERNETES_TOKEN=eyJhcGciDiJS...
+```
  
 ## Usage
 
