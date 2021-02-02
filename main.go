@@ -9,12 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/oauth2"
 	"gopkg.in/urfave/cli.v2"
 	apicorev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	appsv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -45,11 +47,6 @@ func main() {
 		namespace     string
 	)
 
-	defaultConfigFile := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		defaultConfigFile = path.Join(home, ".kube/config")
-	}
-
 	app.Commands = []*cli.Command{
 		{
 			Name: "deploy",
@@ -58,7 +55,6 @@ func main() {
 					Name:        "config-file",
 					Aliases:     []string{"f"},
 					Usage:       "the kubernetes config file path",
-					Value:       defaultConfigFile,
 					Destination: &configFile,
 				},
 				&cli.StringFlag{
@@ -88,7 +84,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				clientset, err := getClientset(configFile)
+				clientset, err := getClientSet(configFile)
 				if err != nil {
 					return fmt.Errorf("fail to get kubernetes clientset: %v", err)
 				}
@@ -106,7 +102,6 @@ func main() {
 					Name:        "config-file",
 					Aliases:     []string{"f"},
 					Usage:       "the kubernetes config file path",
-					Value:       defaultConfigFile,
 					Destination: &configFile,
 				},
 				&cli.StringFlag{
@@ -124,7 +119,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				clientset, err := getClientset(configFile)
+				clientset, err := getClientSet(configFile)
 				if err != nil {
 					return fmt.Errorf("fail to get kubernetes clientset: %v", err)
 				}
@@ -268,8 +263,44 @@ func rollback(serviceName string) error {
 	return err
 }
 
-func getClientset(configFile string) (*kubernetes.Clientset, error) {
-	config, err := clientcmd.BuildConfigFromFlags("", configFile)
+type stringToken struct {
+	token string
+}
+
+func (s stringToken) Token() (*oauth2.Token, error) {
+	return &oauth2.Token{
+		AccessToken: s.token,
+		Expiry:      time.Now().Add(5 * time.Minute),
+	}, nil
+}
+
+func getConfigFromEnv() (*rest.Config, error) {
+	return &rest.Config{
+		Host: os.Getenv("KUBERNETES_SERVER"),
+		TLSClientConfig: rest.TLSClientConfig{
+			CAData: []byte(os.Getenv("KUBERNETES_CERT")),
+		},
+		WrapTransport: rest.TokenSourceWrapTransport(stringToken{os.Getenv("KUBERNETES_TOKEN")}),
+	}, nil
+}
+
+func getClientSet(configFile string) (*kubernetes.Clientset, error) {
+	var (
+		err    error
+		home   string
+		config *rest.Config
+	)
+
+	if configFile != "" {
+		config, err = clientcmd.BuildConfigFromFlags("", configFile)
+	} else if os.Getenv("KUBERNETES_CERT") != "" && os.Getenv("KUBERNETES_TOKEN") != "" {
+		config, err = getConfigFromEnv()
+	} else if home, err = os.UserHomeDir(); err != nil {
+		return nil, err
+	} else {
+		config, err = clientcmd.BuildConfigFromFlags("", path.Join(home, ".kube/config"))
+	}
+
 	if err != nil {
 		return nil, err
 	}
